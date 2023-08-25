@@ -194,6 +194,10 @@ django.jQuery(function ($) {
           var timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           url = `${apiUrl}?timezone=${timezone}&start=${startDate}&end=${endDate}`;
         }
+        if ($('#org-selector').val()) {
+          var orgSlug = $('#org-selector').val();
+          url = `${url}&organization_slug=${orgSlug}`;
+        }
         return url;
       },
       createCharts = function (data){
@@ -209,6 +213,22 @@ django.jQuery(function ($) {
           }
           createChart(chart, data.x, htmlId, chart.title, chart.type, chartQuickLink);
         });
+      },
+      addOrganizationSelector = function (data) {
+        var orgSelector = $('#org-selector');
+        if (data.organizations === undefined) {
+          orgSelector.hide();
+          return;
+        }
+        if (orgSelector.data('select2-id') === 'org-selector') {
+          return;
+        }
+        orgSelector.select2({
+          data: data.organizations,
+          allowClear: true,
+          placeholder: gettext('Organization Filter')
+        });
+        orgSelector.show();
       },
       loadCharts = function (time, showLoading) {
         $.ajax(getChartFetchUrl(time), {
@@ -230,6 +250,7 @@ django.jQuery(function ($) {
               fallback.show();
             }
             createCharts(data);
+            addOrganizationSelector(data);
           },
           error: function () {
             alert('Something went wrong while loading the charts');
@@ -255,7 +276,7 @@ django.jQuery(function ($) {
       var range = localStorage.getItem(timeRangeKey) || defaultTimeRange;
       var startLabel = localStorage.getItem(startDayKey) || moment().format('MMMM D, YYYY');
       var endLabel = localStorage.getItem(endDayKey) || moment().format('MMMM D, YYYY');
-      
+
       // Disable the zoom chart and scrolling when we refresh the page
       localStorage.setItem(isChartZoomScroll, false);
       localStorage.setItem(isChartZoomed, false);
@@ -314,20 +335,27 @@ django.jQuery(function ($) {
     });
     // bind export button
     $('#ow-chart-time a.export').click(function () {
-      var time = localStorage.getItem(timeRangeKey);
-      location.href = baseUrl + time + '&csv=1';
+      var queryString,
+        queryParams = {'csv': 1};
+        queryParams.time = localStorage.getItem(timeRangeKey);
       // If custom or pickerChosenLabelKey is 'Custom Range', pass pickerEndDate and pickerStartDate to csv url
       if (localStorage.getItem(isCustomDateRange) === 'true' || localStorage.getItem(pickerChosenLabelKey) === customDateRangeLabel) {
-      var startDate = localStorage.getItem(startDateTimeKey);
-      var endDate = localStorage.getItem(endDateTimeKey);
-      if (localStorage.getItem(isChartZoomed) === 'true') {
-        time = localStorage.getItem(zoomtimeRangeKey);
-        endDate = localStorage.getItem(zoomEndDateTimeKey);
-        startDate = localStorage.getItem(zoomStartDateTimeKey);
+        queryParams.start = localStorage.getItem(startDateTimeKey);
+        queryParams.end = localStorage.getItem(endDateTimeKey);
+        if (localStorage.getItem(isChartZoomed) === 'true') {
+          queryParams.time = localStorage.getItem(zoomtimeRangeKey);
+          queryParams.end = localStorage.getItem(zoomEndDateTimeKey);
+          queryParams.start = localStorage.getItem(zoomStartDateTimeKey);
+        }
+        queryParams.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       }
-      var timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      location.href = `${apiUrl}?timezone=${timezone}&start=${startDate}&end=${endDate}&csv=1`;
+      if ($('#org-selector').val()) {
+        queryParams.organization_slug = $('#org-selector').val();
       }
+      queryString = Object.keys(queryParams)
+        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`)
+        .join('&');
+      location.href = `${apiUrl}?${queryString}`;
     });
     // fetch chart data and replace the old charts with the new ones
     function loadFetchedCharts(time){
@@ -344,5 +372,12 @@ django.jQuery(function ($) {
         },
       });
     }
+
+    $('#org-selector').change(function(){
+      loadCharts(
+        localStorage.getItem(timeRangeKey) || defaultTimeRange,
+        true
+      );
+    });
   });
 }(django.jQuery));
